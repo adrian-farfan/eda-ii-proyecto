@@ -1,4 +1,4 @@
-// Sistema de pedidos (consola). Sin STL: Hash + AVL + Max-Heap hechos a mano.
+// Sistema de pedidos (version simple, consola). Sin STL: Hash + AVL + Max-Heap hechos a mano.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -23,7 +23,6 @@ void mostrar(const Pedido* p) {
     printf("%-10s %-9s %-8s prio=%-2d $%lld.%02lld %s %s %s\n", p->id, p->dni, p->tipo, p->prio,
            p->centavos / 100, p->centavos % 100, p->fecha, p->hora, p->estado);
 }
-
 
 // ---------------- TABLA HASH (djb2 + encadenamiento) ----------------
 struct NodoHash { Pedido* p; NodoHash* sig; };
@@ -70,8 +69,6 @@ struct TablaHash {
             }
     }
 };
-
-
 
 // ---------------- ARBOL AVL (fecha+hora, desempate por id) ----------------
 struct NodoAVL { Pedido* p; NodoAVL *izq, *der; int h; };
@@ -128,8 +125,6 @@ void rango(NodoAVL* n, long long d, long long h, int& cant, long long& suma, int
     if (k <= h) rango(n->der, d, h, cant, suma, visitados);
 }
 
-
-
 // ---------------- MAX-HEAP (prioridad, luego mas antiguo) ----------------
 struct MaxHeap {
     Pedido** a; int cap, n;
@@ -173,19 +168,15 @@ struct MaxHeap {
     }
 };
 
-
-
 // ---------------- SISTEMA ----------------
 TablaHash hash;
 NodoAVL* raiz = NULL;
 MaxHeap heap;
-long long montoTotal = 0;   // monto acumulado (centavos), se mantiene en O(1)
 
 bool registrar(Pedido* p) {
     if (!hash.insertar(p)) return false;
     raiz = avlInsertar(raiz, p);
     p->idxHeap = -1;
-    montoTotal += p->centavos;
     if (strcmp(p->estado, "Pendiente") == 0) heap.insertar(p);
     return true;
 }
@@ -202,7 +193,6 @@ bool cancelar(const char* id) {
     if (!p) return false;
     if (p->idxHeap >= 0) heap.eliminarEn(p->idxHeap);
     raiz = avlEliminar(raiz, p);
-    montoTotal -= p->centavos;
     hash.eliminar(id);
     delete p;
     return true;
@@ -246,11 +236,6 @@ void cargar(const char* ruta) {
            (clock() - t0) * 1000.0 / CLOCKS_PER_SEC);
 }
 
-void estadisticas() {
-    printf("Pedidos: %d | Pendientes: %d | Monto total acumulado: $%lld.%02lld\n", hash.n, heap.n,
-           montoTotal / 100, montoTotal % 100);
-}
-
 void generar(const char* ruta, int n) {
     FILE* f = fopen(ruta, "w");
     if (!f) return;
@@ -267,19 +252,17 @@ void generar(const char* ruta, int n) {
     printf("Archivo %s generado con %d pedidos.\n", ruta, n);
 }
 
-
-
 int main() {
     int op;
     char buf[64], buf2[64];
     for (;;) {
         printf("\n=== LOGITRACK SIMPLE === pedidos: %d | pendientes: %d\n", hash.n, heap.n);
         printf("1 Generar CSV  2 Cargar CSV  3 Registrar  4 Buscar por ID  5 Despachar N\n");
-        printf("6 Ver N mas antiguos  7 Rango de fechas  8 Cambiar estado  9 Cancelar  10 Estadisticas  0 Salir\n> ");
+        printf("6 Ver N mas antiguos  7 Rango de fechas  8 Cambiar estado  9 Cancelar  0 Salir\n> ");
         if (scanf("%d", &op) != 1) break;
         clock_t t0 = clock();
         if (op == 0) break;
-        else if (op == 1) { int n; printf("Archivo y cantidad: "); scanf("%63s %d", buf, &n); generar(buf, n); }
+        else if (op == 1) { int n; printf("Cantidad: "); scanf("%d", &n); generar("pedidos.csv", n); }
         else if (op == 2) { printf("Archivo: "); scanf("%63s", buf); cargar(buf); }
         else if (op == 3) {
             char linea[200];
@@ -317,8 +300,7 @@ int main() {
                    suma / 100, suma % 100, vis, hash.n);
         }
         else if (op == 8) {
-            printf("ID: "); scanf("%63s", buf);
-            printf("Nuevo estado (puede tener espacios): "); scanf(" %63[^\n]", buf2);
+            printf("ID y nuevo estado: "); scanf("%63s %63s", buf, buf2);
             Pedido* p = hash.buscar(buf);
             if (p) { cambiarEstado(p, buf2); mostrar(p); } else printf("No existe.\n");
         }
@@ -327,9 +309,7 @@ int main() {
             if (cancelar(buf)) printf("Cancelado. Buscar de nuevo: %s\n", hash.buscar(buf) ? "ERROR" : "ya no existe");
             else printf("No existe.\n");
         }
-        else if (op == 10) estadisticas();
         printf("(tiempo: %.4f ms)\n", (clock() - t0) * 1000.0 / CLOCKS_PER_SEC);
     }
     return 0;
 }
-
