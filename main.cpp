@@ -172,11 +172,13 @@ struct MaxHeap {
 TablaHash hash;
 NodoAVL* raiz = NULL;
 MaxHeap heap;
+long long montoTotal = 0;   // monto acumulado en centavos (estadistica O(1))
 
 bool registrar(Pedido* p) {
     if (!hash.insertar(p)) return false;
     raiz = avlInsertar(raiz, p);
     p->idxHeap = -1;
+    montoTotal += p->centavos;
     if (strcmp(p->estado, "Pendiente") == 0) heap.insertar(p);
     return true;
 }
@@ -193,6 +195,7 @@ bool cancelar(const char* id) {
     if (!p) return false;
     if (p->idxHeap >= 0) heap.eliminarEn(p->idxHeap);
     raiz = avlEliminar(raiz, p);
+    montoTotal -= p->centavos;
     hash.eliminar(id);
     delete p;
     return true;
@@ -256,7 +259,8 @@ int main() {
     int op;
     char buf[64], buf2[64];
     for (;;) {
-        printf("\n=== LOGITRACK SIMPLE === pedidos: %d | pendientes: %d\n", hash.n, heap.n);
+        printf("\n=== LOGITRACK SIMPLE === pedidos: %d | pendientes: %d | monto total: $%lld.%02lld\n", hash.n, heap.n,
+               montoTotal / 100, montoTotal % 100);
         printf("1 Generar CSV  2 Cargar CSV  3 Registrar  4 Buscar por ID  5 Despachar N\n");
         printf("6 Ver N mas antiguos  7 Rango de fechas  8 Cambiar estado  9 Cancelar  0 Salir\n> ");
         if (scanf("%d", &op) != 1) break;
@@ -300,7 +304,8 @@ int main() {
                    suma / 100, suma % 100, vis, hash.n);
         }
         else if (op == 8) {
-            printf("ID y nuevo estado: "); scanf("%63s %63s", buf, buf2);
+            printf("ID: "); scanf("%63s", buf);
+            printf("Nuevo estado: "); scanf(" %15[^\n]", buf2);
             Pedido* p = hash.buscar(buf);
             if (p) { cambiarEstado(p, buf2); mostrar(p); } else printf("No existe.\n");
         }
