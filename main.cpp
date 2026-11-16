@@ -68,57 +68,233 @@ struct TablaHash {
     }
 };
 
-struct NodoAVL { Pedido* p; NodoAVL *izq, *der; int h; };
+enum Color { ROJO, NEGRO };
 
-int alt(NodoAVL* n) { return n ? n->h : 0; }
-void act(NodoAVL* n) { n->h = 1 + (alt(n->izq) > alt(n->der) ? alt(n->izq) : alt(n->der)); }
+struct NodoRB {
+    Pedido* p;
+    Color color;
+    NodoRB *izq, *der, *padre;
+    NodoRB(Pedido* d) : p(d), color(ROJO), izq(nullptr), der(nullptr), padre(nullptr) {}
+};
+
 int cmp(const Pedido* a, const Pedido* b) {
     if (a->clave != b->clave) return a->clave < b->clave ? -1 : 1;
     return strcmp(a->id, b->id);
 }
-NodoAVL* rotDer(NodoAVL* y) { NodoAVL* x = y->izq; y->izq = x->der; x->der = y; act(y); act(x); return x; }
-NodoAVL* rotIzq(NodoAVL* x) { NodoAVL* y = x->der; x->der = y->izq; y->izq = x; act(x); act(y); return y; }
-NodoAVL* balancear(NodoAVL* n) {
-    act(n);
-    int fb = alt(n->izq) - alt(n->der);
-    if (fb > 1) { if (alt(n->izq->izq) < alt(n->izq->der)) n->izq = rotIzq(n->izq); return rotDer(n); }
-    if (fb < -1) { if (alt(n->der->der) < alt(n->der->izq)) n->der = rotDer(n->der); return rotIzq(n); }
-    return n;
-}
-NodoAVL* avlInsertar(NodoAVL* n, Pedido* p) {
-    if (!n) return new NodoAVL{p, NULL, NULL, 1};
-    if (cmp(p, n->p) < 0) n->izq = avlInsertar(n->izq, p);
-    else n->der = avlInsertar(n->der, p);
-    return balancear(n);
-}
-NodoAVL* avlEliminar(NodoAVL* n, const Pedido* p) {
-    if (!n) return NULL;
-    int c = cmp(p, n->p);
-    if (c < 0) n->izq = avlEliminar(n->izq, p);
-    else if (c > 0) n->der = avlEliminar(n->der, p);
-    else {
-        if (!n->izq || !n->der) { NodoAVL* hijo = n->izq ? n->izq : n->der; delete n; return hijo; }
-        NodoAVL* s = n->der;
-        while (s->izq) s = s->izq;
-        n->p = s->p;
-        n->der = avlEliminar(n->der, s->p);
+
+struct ArbolRedBlack {
+    NodoRB* raiz;
+    NodoRB* TNULL;
+    ArbolRedBlack() { TNULL = new NodoRB(NULL); TNULL->color = NEGRO; raiz = TNULL; }
+    ~ArbolRedBlack() { destruirArbol(raiz); delete TNULL; }
+    NodoRB* minimo(NodoRB* n) {
+        while (n->izq != TNULL) n = n->izq;
+        return n;
     }
-    return balancear(n);
-}
-void inorden(NodoAVL* n, int& cont, int max) {
-    if (!n || cont >= max) return;
-    inorden(n->izq, cont, max);
-    if (cont < max) { cont++; printf("%3d. ", cont); mostrar(n->p); }
-    inorden(n->der, cont, max);
-}
-void rango(NodoAVL* n, long long d, long long h, int& cant, long long& suma, int& visitados) {
-    if (!n) return;
-    visitados++;
-    long long k = n->p->clave;
-    if (k >= d) rango(n->izq, d, h, cant, suma, visitados);
-    if (k >= d && k <= h) { cant++; suma += n->p->centavos; }
-    if (k <= h) rango(n->der, d, h, cant, suma, visitados);
-}
+    void rotacionIzquierda(NodoRB* x) {
+        NodoRB* y = x->der;
+        x->der = y->izq;
+        if (y->izq != TNULL) y->izq->padre = x;
+        y->padre = x->padre;
+        if (x->padre == nullptr) raiz = y;
+        else if (x == x->padre->izq) x->padre->izq = y;
+        else x->padre->der = y;
+        y->izq = x;
+        x->padre = y;
+    }
+    void rotacionDerecha(NodoRB* x) {
+        NodoRB* y = x->izq;
+        x->izq = y->der;
+        if (y->der != TNULL) y->der->padre = x;
+        y->padre = x->padre;
+        if (x->padre == nullptr) raiz = y;
+        else if (x == x->padre->der) x->padre->der = y;
+        else x->padre->izq = y;
+        y->der = x;
+        x->padre = y;
+    }
+    void transplantar(NodoRB* u, NodoRB* v) {
+        if (u->padre == nullptr) raiz = v;
+        else if (u == u->padre->izq) u->padre->izq = v;
+        else u->padre->der = v;
+        v->padre = u->padre;
+    }
+    NodoRB* insertarBST(Pedido* p) {
+        NodoRB* nodo = new NodoRB(p);
+        nodo->izq = TNULL;
+        nodo->der = TNULL;
+        NodoRB* y = nullptr;
+        NodoRB* x = raiz;
+        while (x != TNULL) {
+            y = x;
+            if (cmp(nodo->p, x->p) < 0) x = x->izq;
+            else x = x->der;
+        }
+        nodo->padre = y;
+        if (y == nullptr) raiz = nodo;
+        else if (cmp(nodo->p, y->p) < 0) y->izq = nodo;
+        else y->der = nodo;
+        return nodo;
+    }
+    void repararInsercion(NodoRB* k) {
+        NodoRB* u;
+        while (k->padre->color == ROJO) {
+            if (k->padre == k->padre->padre->der) {
+                u = k->padre->padre->izq;
+                if (u->color == ROJO) {
+                    u->color = NEGRO;
+                    k->padre->color = NEGRO;
+                    k->padre->padre->color = ROJO;
+                    k = k->padre->padre;
+                } else {
+                    if (k == k->padre->izq) {
+                        k = k->padre;
+                        rotacionDerecha(k);
+                    }
+                    k->padre->color = NEGRO;
+                    k->padre->padre->color = ROJO;
+                    rotacionIzquierda(k->padre->padre);
+                }
+            } else {
+                u = k->padre->padre->der;
+                if (u->color == ROJO) {
+                    u->color = NEGRO;
+                    k->padre->color = NEGRO;
+                    k->padre->padre->color = ROJO;
+                    k = k->padre->padre;
+                } else {
+                    if (k == k->padre->der) {
+                        k = k->padre;
+                        rotacionIzquierda(k);
+                    }
+                    k->padre->color = NEGRO;
+                    k->padre->padre->color = ROJO;
+                    rotacionDerecha(k->padre->padre);
+                }
+            }
+            if (k == raiz) break;
+        }
+        raiz->color = NEGRO;
+    }
+    void insertar(Pedido* p) {
+        NodoRB* nuevo = insertarBST(p);
+        if (nuevo->padre == nullptr) { nuevo->color = NEGRO; return; }
+        repararInsercion(nuevo);
+    }
+    void repararEliminacion(NodoRB* x) {
+        NodoRB* s;
+        while (x != raiz && x->color == NEGRO) {
+            if (x == x->padre->izq) {
+                s = x->padre->der;
+                if (s->color == ROJO) {
+                    s->color = NEGRO;
+                    x->padre->color = ROJO;
+                    rotacionIzquierda(x->padre);
+                    s = x->padre->der;
+                }
+                if (s->izq->color == NEGRO && s->der->color == NEGRO) {
+                    s->color = ROJO;
+                    x = x->padre;
+                } else {
+                    if (s->der->color == NEGRO) {
+                        s->izq->color = NEGRO;
+                        s->color = ROJO;
+                        rotacionDerecha(s);
+                        s = x->padre->der;
+                    }
+                    s->color = x->padre->color;
+                    x->padre->color = NEGRO;
+                    s->der->color = NEGRO;
+                    rotacionIzquierda(x->padre);
+                    x = raiz;
+                }
+            } else {
+                s = x->padre->izq;
+                if (s->color == ROJO) {
+                    s->color = NEGRO;
+                    x->padre->color = ROJO;
+                    rotacionDerecha(x->padre);
+                    s = x->padre->izq;
+                }
+                if (s->izq->color == NEGRO && s->der->color == NEGRO) {
+                    s->color = ROJO;
+                    x = x->padre;
+                } else {
+                    if (s->izq->color == NEGRO) {
+                        s->der->color = NEGRO;
+                        s->color = ROJO;
+                        rotacionIzquierda(s);
+                        s = x->padre->izq;
+                    }
+                    s->color = x->padre->color;
+                    x->padre->color = NEGRO;
+                    s->izq->color = NEGRO;
+                    rotacionDerecha(x->padre);
+                    x = raiz;
+                }
+            }
+        }
+        x->color = NEGRO;
+    }
+    void eliminarNodoHelper(NodoRB* nodo, const Pedido* p) {
+        NodoRB* z = TNULL;
+        NodoRB *x, *y;
+        while (nodo != TNULL) {
+            if (nodo->p == p) z = nodo;
+            if (cmp(nodo->p, p) <= 0) nodo = nodo->der;
+            else nodo = nodo->izq;
+        }
+        if (z == TNULL) return;
+        y = z;
+        Color y_color_original = y->color;
+        if (z->izq == TNULL) {
+            x = z->der;
+            transplantar(z, z->der);
+        } else if (z->der == TNULL) {
+            x = z->izq;
+            transplantar(z, z->izq);
+        } else {
+            y = minimo(z->der);
+            y_color_original = y->color;
+            x = y->der;
+            if (y->padre == z) x->padre = y;
+            else {
+                transplantar(y, y->der);
+                y->der = z->der;
+                y->der->padre = y;
+            }
+            transplantar(z, y);
+            y->izq = z->izq;
+            y->izq->padre = y;
+            y->color = z->color;
+        }
+        delete z;
+        if (y_color_original == NEGRO) repararEliminacion(x);
+    }
+    void eliminar(const Pedido* p) { eliminarNodoHelper(raiz, p); }
+    void destruirArbol(NodoRB* n) {
+        if (n != TNULL) {
+            destruirArbol(n->izq);
+            destruirArbol(n->der);
+            delete n->p;
+            delete n;
+        }
+    }
+    void inorden(NodoRB* n, int& cont, int max) {
+        if (n == TNULL || cont >= max) return;
+        inorden(n->izq, cont, max);
+        if (cont < max) { cont++; printf("%3d. ", cont); mostrar(n->p); }
+        inorden(n->der, cont, max);
+    }
+    void rango(NodoRB* n, long long d, long long h, int& cant, long long& suma, int& visitados) {
+        if (n == TNULL) return;
+        visitados++;
+        long long k = n->p->clave;
+        if (k >= d) rango(n->izq, d, h, cant, suma, visitados);
+        if (k >= d && k <= h) { cant++; suma += n->p->centavos; }
+        if (k <= h) rango(n->der, d, h, cant, suma, visitados);
+    }
+};
 
 struct MaxHeap {
     Pedido** a; int cap, n;
@@ -163,13 +339,13 @@ struct MaxHeap {
 };
 
 TablaHash hash;
-NodoAVL* raiz = NULL;
+ArbolRedBlack arbol;
 MaxHeap heap;
 long long montoTotal = 0;
 
 bool registrar(Pedido* p) {
     if (!hash.insertar(p)) return false;
-    raiz = avlInsertar(raiz, p);
+    arbol.insertar(p);
     p->idxHeap = -1;
     montoTotal += p->centavos;
     if (strcmp(p->estado, "Pendiente") == 0) heap.insertar(p);
@@ -187,7 +363,7 @@ bool cancelar(const char* id) {
     Pedido* p = hash.buscar(id);
     if (!p) return false;
     if (p->idxHeap >= 0) heap.eliminarEn(p->idxHeap);
-    raiz = avlEliminar(raiz, p);
+    arbol.eliminar(p);
     montoTotal -= p->centavos;
     hash.eliminar(id);
     delete p;
@@ -283,7 +459,7 @@ int main() {
                 mostrar(p);
             }
         }
-        else if (op == 6) { int n, c = 0; printf("N: "); scanf("%d", &n); inorden(raiz, c, n); }
+        else if (op == 6) { int n, c = 0; printf("N: "); scanf("%d", &n); arbol.inorden(arbol.raiz, c, n); }
         else if (op == 7) {
             printf("Desde y hasta (AAAA-MM-DD AAAA-MM-DD): "); scanf("%63s %63s", buf, buf2);
             int a, m, d, cant = 0, vis = 0; long long suma = 0;
@@ -291,7 +467,7 @@ int main() {
             long long desde = ((long long)a * 10000 + m * 100 + d) * 1000000LL;
             sscanf(buf2, "%d-%d-%d", &a, &m, &d);
             long long hasta = ((long long)a * 10000 + m * 100 + d) * 1000000LL + 235959;
-            rango(raiz, desde, hasta, cant, suma, vis);
+            arbol.rango(arbol.raiz, desde, hasta, cant, suma, vis);
             printf("Pedidos: %d | Monto total: $%lld.%02lld | nodos visitados: %d de %d\n", cant,
                    suma / 100, suma % 100, vis, hash.n);
         }
