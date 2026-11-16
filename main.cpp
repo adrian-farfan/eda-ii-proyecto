@@ -1,4 +1,3 @@
-// Sistema de pedidos (version simple, consola). Sin STL: Hash + AVL + Max-Heap hechos a mano.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -8,8 +7,8 @@ struct Pedido {
     char id[16], dni[12], tipo[12], fecha[11], hora[9], estado[16];
     int prio;
     long long centavos;
-    long long clave;   // YYYYMMDDHHMMSS, clave del AVL
-    int idxHeap;       // posicion en el heap, -1 si no esta
+    long long clave;
+    int idxHeap;
 };
 
 long long calcularClave(const char* f, const char* h) {
@@ -24,7 +23,6 @@ void mostrar(const Pedido* p) {
            p->centavos / 100, p->centavos % 100, p->fecha, p->hora, p->estado);
 }
 
-// ---------------- TABLA HASH (djb2 + encadenamiento) ----------------
 struct NodoHash { Pedido* p; NodoHash* sig; };
 
 struct TablaHash {
@@ -70,7 +68,6 @@ struct TablaHash {
     }
 };
 
-// ---------------- ARBOL AVL (fecha+hora, desempate por id) ----------------
 struct NodoAVL { Pedido* p; NodoAVL *izq, *der; int h; };
 
 int alt(NodoAVL* n) { return n ? n->h : 0; }
@@ -108,14 +105,12 @@ NodoAVL* avlEliminar(NodoAVL* n, const Pedido* p) {
     }
     return balancear(n);
 }
-// In-order, se detiene al llegar a max
 void inorden(NodoAVL* n, int& cont, int max) {
     if (!n || cont >= max) return;
     inorden(n->izq, cont, max);
     if (cont < max) { cont++; printf("%3d. ", cont); mostrar(n->p); }
     inorden(n->der, cont, max);
 }
-// Rango con poda: solo baja por ramas que pueden tener claves en [d, h]
 void rango(NodoAVL* n, long long d, long long h, int& cant, long long& suma, int& visitados) {
     if (!n) return;
     visitados++;
@@ -125,7 +120,6 @@ void rango(NodoAVL* n, long long d, long long h, int& cant, long long& suma, int
     if (k <= h) rango(n->der, d, h, cant, suma, visitados);
 }
 
-// ---------------- MAX-HEAP (prioridad, luego mas antiguo) ----------------
 struct MaxHeap {
     Pedido** a; int cap, n;
     MaxHeap() : cap(1024), n(0) { a = new Pedido*[cap]; }
@@ -154,7 +148,7 @@ struct MaxHeap {
         }
         poner(n, p); subir(n); n++;
     }
-    void eliminarEn(int i) {            // borrado por indice (cancelar / cambio de estado)
+    void eliminarEn(int i) {
         Pedido* sale = a[i];
         n--;
         if (i != n) { poner(i, a[n]); subir(i); bajar(i); }
@@ -168,11 +162,10 @@ struct MaxHeap {
     }
 };
 
-// ---------------- SISTEMA ----------------
 TablaHash hash;
 NodoAVL* raiz = NULL;
 MaxHeap heap;
-long long montoTotal = 0;   // monto acumulado en centavos (estadistica O(1))
+long long montoTotal = 0;
 
 bool registrar(Pedido* p) {
     if (!hash.insertar(p)) return false;
@@ -201,7 +194,6 @@ bool cancelar(const char* id) {
     return true;
 }
 
-// Linea CSV: id,dni,tipo,prioridad,monto,fecha,hora,estado
 bool parsear(char* linea, Pedido* p) {
     char* c[8]; int k = 0;
     c[k++] = linea;
